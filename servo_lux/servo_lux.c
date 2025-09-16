@@ -3,6 +3,7 @@
 #include "hardware/i2c.h"
 #include "bh1750_light_sensor.h"
 #include "ssd1306.h"
+#include "hardware/pwm.h"
 
 #define I2C_PORT i2c0
 #define I2C_SDA 0
@@ -12,8 +13,12 @@
 #define I2C_SCL_DISP 15
 #define endereco 0x3C
 #define BUZZER_PIN 10
-#define LUX_MIN 50
+#define LUX_MIN 70
 #define LUX_MAX 700
+#define SERVO_PIN 28
+#define PULSO_MIN 1000
+#define PULSO_MAX 2000
+#define PULSO_OFF 1500
 
 ssd1306_t ssd;
 
@@ -66,6 +71,14 @@ int main() {
     ssd1306_config(&ssd);   
     ssd1306_fill(&ssd, false);
 
+    // Inicializa e configura o PWM 
+    gpio_set_function(SERVO_PIN, GPIO_FUNC_PWM);
+    uint slice_num = pwm_gpio_to_slice_num(SERVO_PIN);
+    pwm_config config = pwm_get_default_config();
+    pwm_config_set_clkdiv(&config, 125.0f);
+    pwm_config_set_wrap(&config, 19999);
+    pwm_init(slice_num, &config, true);
+
 
     // Inicializa sensor de luz BH1750
     bh1750_power_on(I2C_PORT);
@@ -78,10 +91,14 @@ int main() {
         sprintf(str_lux, "%d Lux", lux);
         printf("Lux = %d\n", lux);
 
-        if (lux < LUX_MIN) {
+        if (lux < LUX_MIN) { // Caso a luminosidade esteja abaixo do limite mínimo, o servo é acionado em um sentido de rotação
             buzzer_beep(400, 300);
-        } else if (lux > LUX_MAX) {
+            pwm_set_gpio_level(SERVO_PIN, PULSO_MIN);
+        } else if (lux > LUX_MAX) { // Se a luminosidade exceder o limite máximo, o servomotor é acionado em sentido oposto
             buzzer_beep(1500, 200);
+            pwm_set_gpio_level(SERVO_PIN, PULSO_MAX);
+        } else if (lux > LUX_MIN && lux < LUX_MAX){ //Se a luminosidade estiver na faixa intermediária, o servo fica parado
+            pwm_set_gpio_level(SERVO_PIN, PULSO_OFF);
         }
 
         ssd1306_fill(&ssd, false); // limpa a tela
